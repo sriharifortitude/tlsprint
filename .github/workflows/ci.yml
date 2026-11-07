@@ -69,6 +69,11 @@ jobs:
           sudo apt-get update -q
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q tshark
           tshark --version | head -1
+      # Ubuntu's AppArmor profile for tshark refuses files under the runner's work directory.
+      - name: Let tshark read the captures
+        run: |
+          sudo aa-status 2>/dev/null | grep -i shark || true
+          if [ -f /etc/apparmor.d/tshark ]; then sudo apparmor_parser -R /etc/apparmor.d/tshark; fi
       - run: python3 scripts/compare_tshark.py foxio/pcap testdata/demo.pcap
 
   fuzz:
@@ -81,7 +86,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: nightly
-      - run: cargo install cargo-fuzz --version 0.13.1 --locked
+      # Its locked dependencies do not compile on nightly, so the tool is built on stable.
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo +stable install cargo-fuzz --version 0.13.1 --locked
       - name: Seed with the demo capture
         run: |
           mkdir -p fuzz/corpus/capture

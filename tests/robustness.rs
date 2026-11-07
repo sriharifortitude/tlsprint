@@ -110,7 +110,7 @@ fn damage_to_a_pcapng_header_is_handled() {
         FLAG_ACK,
         &record(&handshake(&spec_hello())),
     );
-    let padded = (frame.len() + 3) / 4 * 4;
+    let padded = frame.len().div_ceil(4) * 4;
     let total = (32 + padded) as u32;
     original.extend_from_slice(&[6, 0, 0, 0]);
     original.extend_from_slice(&total.to_le_bytes());
