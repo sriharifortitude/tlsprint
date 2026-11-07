@@ -109,9 +109,23 @@ FoxIO's current specification gives the first and last hex digits, `bd`, with a 
 tlsprint follows the specification, and the script accepts that exact row and fails on any other.
 
 **Against Wireshark.** `scripts/compare_tshark.py` compares the set of fingerprints in each capture
-with Wireshark's own `tls.handshake.ja4` field. There is no tshark on the Windows machine this was
-written on, so this runs in CI. It has been written and has not been run yet; this paragraph will say
-what it found.
+with what tshark 4.6.4 reports in its own `tls.handshake.ja4` and `dtls.handshake.ja4` fields. Over 40
+captures, including a DTLS 1.0 one that FoxIO has no stored result for, tshark found 43 fingerprints and
+tlsprint agreed on 40. Each of the other three was checked against the bytes, and the script accepts
+those exact rows and fails on any other:
+
+- In `sigalg-grease.pcapng` tshark's hash differs. Hashing the list with the GREASE signature algorithm
+  `0a0a` left in gives exactly tshark's value, and the specification says to ignore GREASE anywhere.
+  FoxIO's stored result agrees with tlsprint.
+- In `tls-handshake.pcapng` and `tls-sni.pcapng` tshark finds one more, a client's second hello in a
+  connection that has already sent one, straight after a ChangeCipherSpec record. It looks like the
+  answer to a HelloRetryRequest: the first capture has those, and the second looks like a filtered copy
+  of the same traffic. Each connection is reported here once, for its first hello, as FoxIO's are.
+
+The comparison also found a mistake in my own test data. Wireshark reported the demo capture's hand-built
+client as malformed, because its `supported_groups` extension was empty, and gave it no fingerprint. The
+fixtures now build valid extensions. tlsprint still fingerprints such a hello on purpose: the extension
+exists, and malforming one should not be a way to go unfingerprinted.
 
 **Against the RFCs.** The client Initial packets printed in RFC 9001 and RFC 9369 are test
 vectors here: they have to decrypt to exactly the CRYPTO frame those RFCs print. FoxIO's worked
@@ -119,8 +133,8 @@ example is one too: each hash in its specification, in all four forms, has a tes
 down from the RFC rather than from memory paid off: the secret I remembered was wrong partway through.
 
 **Damaged input.** Tests run with overflow checks on and feed in 12,000 randomly damaged captures
-and frames, and CI fuzzes the capture reader and parsers for 60 seconds per run. Fuzzing can only
-run on Linux, so the first time it runs is in CI.
+and frames, and CI fuzzes the capture reader and parsers for 60 seconds per run. The fuzz target
+builds on Linux only, so it runs in CI and not on the machine this was written on.
 
 **Mutation testing.** I broke the code in 70 places on purpose. On the first run 11 mutants survived,
 and one did not match the source. One survivor was a real bug: with no SYN in the capture, a first
@@ -141,7 +155,8 @@ QUIC Initials), so the results stay the same without them.
 - Draft versions of QUIC are not read, only versions 1 and 2.
 - It has been run on files from the sources named above, and has not been measured on a large or
   live capture. A flood of long-header UDP packets costs an AES and HKDF run each.
-- DTLS 1.3 fingerprints are computed from the rule as the specification words it, "the highest value",
-  though DTLS versions count downwards. No capture here exercises it, so that reading is unconfirmed.
+- Only a DTLS 1.0 client has been compared with another tool. DTLS 1.3 fingerprints follow the
+  specification's wording, "the highest value", though DTLS versions count downwards, and no capture here
+  exercises that.
 - A JA4 identifies a client's TLS stack, not the client. Many programs share a stack, and a tool can
   imitate another's hello, so a match on a watch list is a lead rather than a verdict.
