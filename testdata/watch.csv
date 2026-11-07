@@ -1,0 +1,4 @@
+# An example watch list. The labels are made up; a real list would come from your own hunting.
+# fingerprint,label
+*_8daaf6152771_*,the cipher list of the client under investigation
+t12i*_*_*,TLS 1.2 to a bare IP address

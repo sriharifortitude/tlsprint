@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # FoxIO-LLC/ja4 at 2026-10-06. Its captures and stored results are fetched, never copied here.
+  FOXIO_COMMIT: c6469a7b0dbf8fe963810162429fbfd9d1acc4d5
+
+jobs:
+  lint:
+    name: fmt, clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+
+  test:
+    name: Tests on Rust ${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: ['1.77', stable]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: the README's demo must be what the binary prints
+        run: ./scripts/check-readme.sh
+
+  differential:
+    name: agree with FoxIO's results and with tshark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+      - run: cargo build --release --locked
+      - name: Fetch FoxIO's captures at a fixed commit
+        run: |
+          git init -q foxio
+          git -C foxio fetch -q --depth 1 https://github.com/FoxIO-LLC/ja4.git "$FOXIO_COMMIT"
+          git -C foxio checkout -q FETCH_HEAD
+      - run: python3 scripts/compare_foxio.py foxio
+      - name: Install tshark
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q tshark
+          tshark --version | head -1
+      - run: python3 scripts/compare_tshark.py foxio/pcap testdata/demo.pcap
+
+  fuzz:
+    name: fuzz capture reading and parsing for 60 seconds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: nightly
+      - run: cargo install cargo-fuzz --version 0.13.1 --locked
+      - name: Seed with the demo capture
+        run: |
+          mkdir -p fuzz/corpus/capture
+          cp testdata/demo.pcap fuzz/corpus/capture/
+      - run: cargo +nightly fuzz run capture -- -max_total_time=60
+
+  secrets:
+    name: credsweep over the full commit history
+    runs-on: ubuntu-latest
+    steps:
+      # A shallow clone would let credsweep report a false all-clear.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.27'
+      - run: go install github.com/sriharifortitude/credsweep/cmd/credsweep@v0.1.4
+      - run: credsweep scan .
