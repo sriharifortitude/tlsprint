@@ -47,6 +47,22 @@ pub fn spec_hello() -> Vec<u8> {
 }
 pub const SPEC_JA4: &str = "t13d1516h2_8daaf6152771_e5627efa2ab1";
 
+/// Valid contents for the extensions whose contents the fingerprint does not read, so that other
+/// tools can read these hellos too. Wireshark stops at an empty supported_groups, for one.
+fn plain_extension_body(kind: u16) -> &'static [u8] {
+    match kind {
+        0x0005 => &[1, 0, 0, 0, 0],
+        0x000a => &[0, 2, 0, 0x1d],
+        0x000b => &[1, 0],
+        0x001b => &[2, 0, 2],
+        0x002d => &[1, 1],
+        0x0033 => &[0, 0],
+        0x4469 => &[0, 3, 2, b'h', b'2'],
+        0xff01 => &[0],
+        _ => &[],
+    }
+}
+
 pub fn hello_body(spec: &HelloSpec<'_>, dtls: bool) -> Vec<u8> {
     let mut b = spec.version.to_be_bytes().to_vec();
     b.extend_from_slice(&[0x42; 32]);
@@ -66,7 +82,7 @@ pub fn hello_body(spec: &HelloSpec<'_>, dtls: bool) -> Vec<u8> {
         exts.extend_from_slice(data);
     };
     for e in spec.plain_extensions {
-        push(*e, &[]);
+        push(*e, plain_extension_body(*e));
     }
     if let Some(name) = spec.sni {
         let n = name.as_bytes();
