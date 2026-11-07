@@ -1,0 +1,21 @@
+[package]
+name = "tlsprint"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Reads packet captures and computes the JA4 fingerprint of every TLS and QUIC client, then matches them against a watch list."
+license = "MIT"
+repository = "https://github.com/sriharifortitude/tlsprint"
+readme = "README.md"
+keywords = ["ja4", "tls", "quic", "pcap", "fingerprint"]
+categories = ["command-line-utilities", "network-programming"]
+
+[dependencies]
+aes = "0.8"
+aes-gcm = "0.10"
+hkdf = "0.12"
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+strip = true
