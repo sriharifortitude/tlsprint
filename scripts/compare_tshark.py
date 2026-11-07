@@ -36,7 +36,7 @@ KNOWN = {
 def ja4_fields() -> list[str]:
     """The JA4 fields this tshark has: TLS always, and DTLS if it has one."""
     listing = subprocess.run(["tshark", "-G", "fields"], capture_output=True, text=True, check=False).stdout
-    names = {line.split("	")[2] for line in listing.splitlines() if line.count("	") >= 2}
+    names = {line.split("\t")[2] for line in listing.splitlines() if line.count("\t") >= 2}
     return [f for f in ("tls.handshake.ja4", "dtls.handshake.ja4") if f in names]
 
 
@@ -58,6 +58,19 @@ def from_tshark(capture: pathlib.Path, fields: list[str]) -> set[str] | None:
         # A frame carrying several QUIC hellos lists them comma-separated.
         found.update(line.split(","))
     return found
+
+
+def show_frames(capture: pathlib.Path) -> None:
+    """What tshark makes of each frame, to see why it found no fingerprint."""
+    run = subprocess.run(
+        ["tshark", "-r", str(capture), "-d", "tcp.port==8443,tls", "-T", "fields", "-e", "frame.number",
+         "-e", "frame.protocols", "-e", "tcp.dstport", "-e", "tls.handshake.type", "-e", "_ws.expert.message"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    for line in run.stdout.splitlines()[:40]:
+        print("    " + line.replace("\t", "  ")[:160])
 
 
 def from_tlsprint(binary: str, capture: pathlib.Path) -> set[str] | None:
@@ -103,6 +116,7 @@ def main() -> int:
             for f in sorted(ours - theirs):
                 print(f"  only tlsprint: {f}")
                 totals["only tlsprint"] += 1
+            show_frames(capture)
     for key, value in sorted(totals.items()):
         print(f"{key}: {value}")
     return 1 if totals["captures that differ"] or totals["captures that could not be read"] else 0
